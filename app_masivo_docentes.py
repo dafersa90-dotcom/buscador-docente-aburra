@@ -8,32 +8,32 @@ st.set_page_config(
     layout="wide"
 )
 
+# CONFIGURACIÓN DE OPENAI
+try:
+    API_KEY = st.secrets["OPENAI_API_KEY"]
+except (KeyError, FileNotFoundError):
+    API_KEY = ""
+
 st.title("Buscador de instituciones educativas")
 st.write(
-    "Busca colegios, instituciones educativas y vacantes "
-    "docentes en Medellín y el Valle de Aburrá."
+    "Encuentra instituciones educativas, colegios privados "
+    "y oportunidades laborales en el Valle de Aburrá."
 )
 
-# 1. Leer la clave de forma segura
-try:
-    api_key = st.secrets["OPENAI_API_KEY"]
-except (KeyError, FileNotFoundError):
-    api_key = None
-
-if not api_key:
+if not API_KEY:
     st.error(
-        "Falta OPENAI_API_KEY en Settings → Secrets "
-        "de Streamlit Cloud."
+        "No se encuentra OPENAI_API_KEY. Configúrala en "
+        "Streamlit Cloud → Settings → Secrets."
     )
     st.stop()
 
-# 2. Formulario de búsqueda
+# FORMULARIO DE BÚSQUEDA
 with st.form("formulario_busqueda"):
     consulta = st.text_input(
         "¿Qué deseas encontrar?",
         placeholder=(
-            "Ej.: colegios privados de Medellín "
-            "que busquen docentes de tecnología"
+            "Ej.: colegios privados que busquen docentes "
+            "de Tecnología e Informática"
         )
     )
 
@@ -60,10 +60,10 @@ with st.form("formulario_busqueda"):
         use_container_width=True
     )
 
-# 3. Ejecutar la búsqueda
+# EJECUCIÓN DE LA BÚSQUEDA
 if buscar:
     if not consulta.strip():
-        st.warning("Escribe qué institución o vacante deseas buscar.")
+        st.warning("Escribe lo que deseas buscar.")
         st.stop()
 
     consulta_final = consulta.strip()
@@ -71,45 +71,44 @@ if buscar:
     if municipio != "Todos los municipios del Valle de Aburrá":
         consulta_final += f". Municipio: {municipio}"
     else:
-        consulta_final += ". Zona: Valle de Aburrá, Antioquia, Colombia"
+        consulta_final += (
+            ". Ubicación: Valle de Aburrá, Antioquia, Colombia"
+        )
 
-    instruccion = f"""
-    Investiga en internet la siguiente consulta:
-
+    instrucciones = f"""
+    Busca en internet información relevante y actualizada sobre:
     {consulta_final}
 
-    Prioriza información verificable y actualizada de Colombia.
+    Prioriza fuentes oficiales y páginas verificables.
 
-    Si corresponde, identifica:
-    - Nombre de la institución educativa.
-    - Municipio y dirección, si está publicada.
-    - Vacante o convocatoria docente.
-    - Área o asignatura.
-    - Correo institucional o medio de contacto público.
-    - Enlace directo a la página que respalda cada resultado.
+    Para instituciones educativas y empleos, identifica cuando
+    la información esté disponible:
+    1. Nombre de la institución.
+    2. Municipio.
+    3. Vacante o convocatoria publicada.
+    4. Área o asignatura.
+    5. Correo institucional o contacto público.
+    6. Enlace directo a la fuente.
 
-    No inventes instituciones, vacantes, correos ni direcciones.
+    No inventes datos, correos, teléfonos ni vacantes.
     Diferencia las vacantes confirmadas de las instituciones
-    que solamente podrían recibir hojas de vida.
-    Si no encuentras información suficiente, dilo claramente.
+    que simplemente podrían recibir hojas de vida.
 
-    Presenta los resultados organizados y con enlaces clicables.
+    Si no encuentras resultados, indícalo claramente.
+    Presenta la información en español y con enlaces.
     """
 
     try:
-        with st.spinner("Buscando información en internet..."):
-            cliente = OpenAI(api_key=api_key)
+        cliente = OpenAI(api_key=API_KEY)
 
+        with st.spinner("Buscando información en internet..."):
             respuesta = cliente.responses.create(
                 model="gpt-4.1",
                 tools=[
-                    {
-                        "type": "web_search",
-                        "search_context_size": "high"
-                    }
+                    {"type": "web_search"}
                 ],
                 tool_choice="required",
-                input=instruccion
+                input=instrucciones
             )
 
         resultado = respuesta.output_text
@@ -118,16 +117,7 @@ if buscar:
             st.subheader("Resultados de la búsqueda")
             st.markdown(resultado)
         else:
-            st.warning(
-                "La API respondió, pero no devolvió texto. "
-                "Intenta con otra consulta."
-            )
-
-        # Mostrar información técnica para diagnosticar
-        with st.expander("Información de diagnóstico"):
-            st.write("ID de respuesta:", respuesta.id)
-            st.write("Modelo:", respuesta.model)
-            st.write("Respuesta recibida correctamente.")
+            st.warning("La búsqueda no devolvió resultados.")
 
     except Exception as error:
         st.error("No se pudo completar la búsqueda.")
@@ -135,7 +125,8 @@ if buscar:
             f"{type(error).__name__}: {error}",
             language="text"
         )
-        st.info(
-            "Comprueba la clave API, el saldo o límite de uso "
-            "de la API y los permisos del modelo."
+        st.caption(
+            "Revisa la validez de la clave, el acceso al modelo, "
+            "el saldo o límite de uso de la API y la configuración "
+            "de la herramienta de búsqueda web."
         )
