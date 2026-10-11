@@ -1,4 +1,4 @@
-import os
+import io
 import pandas as pd
 import streamlit as st
 
@@ -225,12 +225,10 @@ if ejecutar_btn:
         " panel lateral."
     )
   else:
-    # FILTRADO ESTRICTO: La institución debe incluir TODAS las áreas seleccionadas (o al menos una estricta intersección)
+    # FILTRADO ESTRICTO: Instituciones que coincidan con los municipios y contengan al menos una de las áreas seleccionadas
     df_filtrado = df_instituciones[
         df_instituciones["Municipio"].isin(municipios_seleccionados)
     ]
-
-    # Filtrar solo instituciones que tengan relación con las áreas marcadas
     df_filtrado = df_filtrado[
         df_filtrado["Áreas"].apply(
             lambda x: any(area in x for area in areas_seleccionadas)
@@ -245,7 +243,6 @@ if ejecutar_btn:
 
       resultados_enfocados = []
       for _, row in df_filtrado.iterrows():
-        # Enlace directo de búsqueda en Google específico para la institución y las áreas elegidas
         query_enfocada = f"vacantes docente {row['Institución']} {row['Municipio']} {' '.join(areas_seleccionadas)}"
         link_google = (
             f"https://www.google.com/search?q={query_enfocada.replace(' ', '+')}"
@@ -265,27 +262,23 @@ if ejecutar_btn:
       df_final = pd.DataFrame(resultados_enfocados)
       st.dataframe(df_final, use_container_width=True)
 
-      # Guardar automáticamente en el Escritorio
-      escritorio_path = os.path.join(os.path.expanduser("~"), "Desktop")
-      if not os.path.exists(escritorio_path):
-        escritorio_path = os.path.join(
-            os.path.expanduser("~"), "OneDrive", "Escritorio"
-        )
+      # Generar archivo Excel en memoria para descarga directa en la nube
+      output = io.BytesIO()
+      with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df_final.to_excel(writer, index=False, sheet_name="Instituciones")
+      excel_data = output.getvalue()
 
-      os.makedirs(escritorio_path, exist_ok=True)
-      ruta_excel = os.path.join(
-          escritorio_path, "Reporte_Enfocado_Docentes_Aburra.xlsx"
-      )
-
-      df_final.to_excel(ruta_excel, index=False, engine="openpyxl")
-      st.info(
-          f"💾 Reporte enfocado guardado en tu Escritorio: `{ruta_excel}`"
+      st.download_button(
+          label="📥 Descargar Reporte en Excel (.xlsx)",
+          data=excel_data,
+          file_name="Reporte_Enfocado_Docentes_Aburra.xlsx",
+          mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          type="primary",
       )
     else:
       st.warning(
-          "No se encontraron instituciones que coincidan exactamente con la"
-          " combinación de municipios y áreas seleccionadas. Prueba"
-          " ampliando un poco los filtros."
+          "No se encontraron instituciones que coincidan con la combinación de"
+          " municipios y áreas seleccionadas. Prueba ampliando los filtros."
       )
 else:
   st.info(
