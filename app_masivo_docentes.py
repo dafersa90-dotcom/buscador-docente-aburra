@@ -2,79 +2,140 @@
 import streamlit as st
 from openai import OpenAI
 
-st.subheader("Buscador inteligente de vacantes docentes")
-
-st.write(
-    "Busca oportunidades laborales en colegios y universidades "
-    "del Valle de Aburrá utilizando inteligencia artificial."
+st.set_page_config(
+    page_title="Buscador de instituciones educativas",
+    page_icon="🔎",
+    layout="wide"
 )
 
-# Leer la clave desde los secretos de Streamlit
+st.title("Buscador de instituciones educativas")
+st.write(
+    "Busca colegios, instituciones educativas y vacantes "
+    "docentes en Medellín y el Valle de Aburrá."
+)
+
+# 1. Leer la clave de forma segura
 try:
     api_key = st.secrets["OPENAI_API_KEY"]
 except (KeyError, FileNotFoundError):
     api_key = None
 
 if not api_key:
-    st.warning(
-        "Configura OPENAI_API_KEY en los secretos de Streamlit "
-        "para habilitar la búsqueda inteligente."
+    st.error(
+        "Falta OPENAI_API_KEY en Settings → Secrets "
+        "de Streamlit Cloud."
     )
-else:
-    cliente = OpenAI(api_key=api_key)
+    st.stop()
 
+# 2. Formulario de búsqueda
+with st.form("formulario_busqueda"):
     consulta = st.text_input(
-        "¿Qué vacantes deseas encontrar?",
+        "¿Qué deseas encontrar?",
         placeholder=(
-            "Ej.: docente de Tecnología e Informática "
-            "en colegios privados de Medellín"
-        ),
+            "Ej.: colegios privados de Medellín "
+            "que busquen docentes de tecnología"
+        )
     )
 
-    if st.button("Buscar vacantes", type="primary"):
-        if not consulta.strip():
-            st.warning("Escribe qué tipo de vacantes buscas.")
+    municipio = st.selectbox(
+        "Municipio",
+        [
+            "Todos los municipios del Valle de Aburrá",
+            "Medellín",
+            "Bello",
+            "Envigado",
+            "Itagüí",
+            "La Estrella",
+            "Sabaneta",
+            "Caldas",
+            "Copacabana",
+            "Girardota",
+            "Barbosa"
+        ]
+    )
+
+    buscar = st.form_submit_button(
+        "Buscar en internet",
+        type="primary",
+        use_container_width=True
+    )
+
+# 3. Ejecutar la búsqueda
+if buscar:
+    if not consulta.strip():
+        st.warning("Escribe qué institución o vacante deseas buscar.")
+        st.stop()
+
+    consulta_final = consulta.strip()
+
+    if municipio != "Todos los municipios del Valle de Aburrá":
+        consulta_final += f". Municipio: {municipio}"
+    else:
+        consulta_final += ". Zona: Valle de Aburrá, Antioquia, Colombia"
+
+    instruccion = f"""
+    Investiga en internet la siguiente consulta:
+
+    {consulta_final}
+
+    Prioriza información verificable y actualizada de Colombia.
+
+    Si corresponde, identifica:
+    - Nombre de la institución educativa.
+    - Municipio y dirección, si está publicada.
+    - Vacante o convocatoria docente.
+    - Área o asignatura.
+    - Correo institucional o medio de contacto público.
+    - Enlace directo a la página que respalda cada resultado.
+
+    No inventes instituciones, vacantes, correos ni direcciones.
+    Diferencia las vacantes confirmadas de las instituciones
+    que solamente podrían recibir hojas de vida.
+    Si no encuentras información suficiente, dilo claramente.
+
+    Presenta los resultados organizados y con enlaces clicables.
+    """
+
+    try:
+        with st.spinner("Buscando información en internet..."):
+            cliente = OpenAI(api_key=api_key)
+
+            respuesta = cliente.responses.create(
+                model="gpt-4.1",
+                tools=[
+                    {
+                        "type": "web_search",
+                        "search_context_size": "high"
+                    }
+                ],
+                tool_choice="required",
+                input=instruccion
+            )
+
+        resultado = respuesta.output_text
+
+        if resultado and resultado.strip():
+            st.subheader("Resultados de la búsqueda")
+            st.markdown(resultado)
         else:
-            instruccion = f"""
-            Busca oportunidades laborales docentes en internet
-            relacionadas con esta solicitud:
+            st.warning(
+                "La API respondió, pero no devolvió texto. "
+                "Intenta con otra consulta."
+            )
 
-            {consulta}
+        # Mostrar información técnica para diagnosticar
+        with st.expander("Información de diagnóstico"):
+            st.write("ID de respuesta:", respuesta.id)
+            st.write("Modelo:", respuesta.model)
+            st.write("Respuesta recibida correctamente.")
 
-            Prioriza fuentes oficiales de colegios, universidades,
-            secretarías de educación y portales de empleo reconocidos.
-
-            Para cada oportunidad encontrada, indica:
-            - Institución y cargo.
-            - Municipio.
-            - Requisitos publicados.
-            - Fecha de publicación, si está disponible.
-            - Estado de la convocatoria, solo si se puede verificar.
-            - Enlace directo a la fuente.
-
-            No inventes vacantes, correos, fechas ni enlaces.
-            Diferencia las convocatorias vigentes de las antiguas
-            o de aquellas cuya vigencia no se pudo confirmar.
-            Si no encuentras resultados verificables, indícalo.
-            """
-
-            with st.spinner("Buscando y analizando resultados..."):
-                try:
-                    respuesta = cliente.responses.create(
-                        model="gpt-4.1",
-                        tools=[
-                            {"type": "web_search"}
-                        ],
-                        input=instruccion,
-                    )
-
-                    st.markdown("### Resultados de la búsqueda")
-                    st.markdown(respuesta.output_text)
-
-                except Exception as error:
-                    st.error(
-                        "No fue posible completar la búsqueda. "
-                        "Verifica la clave API, el acceso al modelo, "
-                        "la facturación y la configuración de búsqueda web."
-                    )
-                    st.caption(f"Detalle técnico: {error}")
+    except Exception as error:
+        st.error("No se pudo completar la búsqueda.")
+        st.code(
+            f"{type(error).__name__}: {error}",
+            language="text"
+        )
+        st.info(
+            "Comprueba la clave API, el saldo o límite de uso "
+            "de la API y los permisos del modelo."
+        )
